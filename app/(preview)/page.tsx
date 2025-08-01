@@ -1,8 +1,8 @@
 "use client";
 
 import { Input } from "@/components/ui/input";
-import { Message } from "ai";
-import { useChat } from "ai/react";
+import { UIMessage, DefaultChatTransport } from "ai";
+import { useChat } from "@ai-sdk/react";
 import { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import ReactMarkdown, { Options } from "react-markdown";
@@ -16,6 +16,9 @@ export default function Chat() {
   const [toolCall, setToolCall] = useState<string>();
   const { messages, input, handleInputChange, handleSubmit, isLoading } =
     useChat({
+      transport: new DefaultChatTransport({
+        api: "/api/chat",
+      }),
       maxSteps: 4,
       onToolCall({ toolCall }) {
         setToolCall(toolCall.toolName);
@@ -32,12 +35,16 @@ export default function Chat() {
   }, [messages]);
 
   const currentToolCall = useMemo(() => {
-    const tools = messages?.slice(-1)[0]?.toolInvocations;
-    if (tools && toolCall === tools[0].toolName) {
-      return tools[0].toolName;
-    } else {
-      return undefined;
+    const lastMessage = messages?.slice(-1)[0];
+    if (lastMessage && lastMessage.parts) {
+      const toolParts = lastMessage.parts.filter(part => 
+        part.type.startsWith('tool-') && part.type !== 'tool-result'
+      );
+      if (toolParts.length > 0 && toolCall) {
+        return toolCall;
+      }
     }
+    return undefined;
   }, [toolCall, messages]);
 
   const awaitingResponse = useMemo(() => {
@@ -52,11 +59,11 @@ export default function Chat() {
     }
   }, [isLoading, currentToolCall, messages]);
 
-  const userQuery: Message | undefined = messages
+  const userQuery: UIMessage | undefined = messages
     .filter((m) => m.role === "user")
     .slice(-1)[0];
 
-  const lastAssistantMessage: Message | undefined = messages
+  const lastAssistantMessage: UIMessage | undefined = messages
     .filter((m) => m.role !== "user")
     .slice(-1)[0];
 
@@ -101,14 +108,14 @@ export default function Chat() {
                 {awaitingResponse || currentToolCall ? (
                   <div className="px-2 min-h-12">
                     <div className="dark:text-neutral-400 text-neutral-500 text-sm w-fit mb-1">
-                      {userQuery.content}
+                      {userQuery.content || userQuery.parts?.filter(part => part.type === 'text').map(part => part.text).join('')}
                     </div>
                     <Loading tool={currentToolCall} />
                   </div>
                 ) : lastAssistantMessage ? (
                   <div className="px-2 min-h-12">
                     <div className="dark:text-neutral-400 text-neutral-500 text-sm w-fit mb-1">
-                      {userQuery.content}
+                      {userQuery.content || userQuery.parts?.filter(part => part.type === 'text').map(part => part.text).join('')}
                     </div>
                     <AssistantMessage message={lastAssistantMessage} />
                   </div>
@@ -122,8 +129,14 @@ export default function Chat() {
   );
 }
 
-const AssistantMessage = ({ message }: { message: Message | undefined }) => {
+const AssistantMessage = ({ message }: { message: UIMessage | undefined }) => {
   if (message === undefined) return "HELLO";
+
+  // In AI SDK v5, message content is in message.parts
+  const textContent = message.parts
+    ?.filter(part => part.type === 'text')
+    .map(part => part.text)
+    .join('') || message.content || '';
 
   return (
     <AnimatePresence mode="wait">
@@ -138,7 +151,7 @@ const AssistantMessage = ({ message }: { message: Message | undefined }) => {
         <MemoizedReactMarkdown
           className={"max-h-72 overflow-y-scroll no-scrollbar-gutter"}
         >
-          {message.content}
+          {textContent}
         </MemoizedReactMarkdown>
       </motion.div>
     </AnimatePresence>
