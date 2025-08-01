@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import { StagewiseToolbar } from "@stagewise/toolbar-next";
+import ReactPlugin from "@stagewise-plugins/react";
 
 import "./globals.css";
 
@@ -16,7 +18,14 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        {children}
+        <StagewiseToolbar 
+          config={{
+            plugins: [ReactPlugin]
+          }}
+        />
+      </body>
     </html>
   );
 }
